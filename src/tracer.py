@@ -10,6 +10,9 @@ class TracerConfig:
 class ActivationCache:
     def __init__(self, cache={}):
         self.store = cache
+
+    def get(self, key):
+        return self.store[key]
     
     def push(self, key, val):
         self.store[key] = val
