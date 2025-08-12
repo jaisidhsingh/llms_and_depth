@@ -1,8 +1,11 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 import datasets
+import torch
+import os
 
 from src.configs import model_configs
 from src.configs import data_configs
+from src.modelling.modelling_lns_llama_1b import LlamaForCausalLM
 
 
 def get_dataset(dataset_name, split):
@@ -24,4 +27,31 @@ def get_model(model_name, device):
         device = "auto"
     
     model_path = model_configs.model_name_to_path[model_name]
+    if "lns-" in model_name:
+        config = AutoConfig.from_pretrained(os.path.join(model_path, "config.json"))
+        model = LlamaForCausalLM(config)
+        model.load_state_dict(torch.load(os.path.join(model_path, "pytorch_model.bin"), weights_only=True), strict=False)
+
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        model = model.to(device)
+        model.eval()
+        return model
+
     return AutoModelForCausalLM.from_pretrained(model_path, device_map=device)
+
+def embed_dataset_collate_fn(batch):
+    input_ids = torch.cat([torch.tensor(item["input_ids"], dtype=torch.long).unsqueeze(0) for item in batch], dim=0)
+    attention_mask = torch.cat([torch.tensor(item["attention_mask"], dtype=torch.long).unsqueeze(0) for item in batch], dim=0)
+    return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+def cast_batch_to_device(batch, device):
+    keys = ["input_ids", "attention_mask"]
+    if "labels" in batch.keys():
+        keys.append("labels")
+    
+    for k in keys:
+        batch[k] = batch[k].to(device)
+    
+    return batch
