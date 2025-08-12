@@ -40,7 +40,7 @@ class HookedModel:
     
     def hook_transformer_layer(self, layer_index):
         def hook(module, input, output):
-            self.cache.push(f"layer_{layer_index}", output)
+            self.cache.push(f"layer_{layer_index}", output[0])
         return hook
     
     def add_hooks_to_model(self, model, model_name):

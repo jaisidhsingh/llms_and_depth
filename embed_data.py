@@ -87,15 +87,17 @@ def main(args):
 
         hooked_model.cache.push("logits", outputs.logits)
 
-        if old_cache is None:
-            old_cache = deepcopy(hooked_model.cache)
-        else:
-            old_cache.add_cache_keywise(hooked_model.cache)
+        print(hooked_model["layer_0"].shape)
+
+        # if old_cache is None:
+        #     old_cache = deepcopy(hooked_model.cache)
+        # else:
+        #     old_cache.add_cache_keywise(hooked_model.cache)
         
         bar.update(1)
         
-        if idx == 2:
-            break
+        # if idx == 0:
+        break
     
     old_cache.print_shapes()
 
