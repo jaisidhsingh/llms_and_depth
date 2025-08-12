@@ -87,7 +87,7 @@ def main(args):
 
         hooked_model.cache.push("logits", outputs.logits)
 
-        print(hooked_model.cache["layer_0"].shape)
+        print(hooked_model.cache.store["layer_0"].shape)
 
         # if old_cache is None:
         #     old_cache = deepcopy(hooked_model.cache)
