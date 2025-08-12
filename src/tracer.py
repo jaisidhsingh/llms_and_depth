@@ -11,9 +11,9 @@ class ActivationCache:
     def __init__(self, cache={}):
         self.store = cache
 
-    def get(self, key):
+    def __idx__(self, key):
         return self.store[key]
-    
+
     def push(self, key, val):
         self.store[key] = val
     
