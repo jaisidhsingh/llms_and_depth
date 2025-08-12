@@ -70,7 +70,7 @@ def prepare_data(args):
 def main(args):
     tokenizer = get_tokenizer(args.model_name)
     model = get_model(args.model_name, args.device)
-    model = torch.compile(model)
+    autocast = torch.amp.autocast
 
     inter_folder = data_configs.dataset_to_path[args.dataset_name].split("/")[-2]
     save_path = os.path.join(DATA_ROOT, inter_folder, f"{args.dataset_name}-{args.split}-full-tokenized-{args.model_name}")
@@ -83,7 +83,9 @@ def main(args):
     bar = tqdm(total=len(loader))
     for idx, batch in enumerate(loader):
         batch = cast_batch_to_device(batch, args.device)
-        outputs = hooked_model(batch)
+
+        with autocast(args.device):
+            outputs = hooked_model(batch)
 
         if old_cache is None:
             old_cache = deepcopy(hooked_model.cache)
