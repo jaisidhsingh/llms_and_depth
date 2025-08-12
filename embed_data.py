@@ -70,7 +70,7 @@ def prepare_data(args):
 def main(args):
     tokenizer = get_tokenizer(args.model_name)
     model = get_model(args.model_name, args.device)
-    print("model loaded.")
+    model = torch.compile(model)
 
     inter_folder = data_configs.dataset_to_path[args.dataset_name].split("/")[-2]
     save_path = os.path.join(DATA_ROOT, inter_folder, f"{args.dataset_name}-{args.split}-full-tokenized-{args.model_name}")
@@ -92,9 +92,6 @@ def main(args):
         
         bar.update(1)
         
-        if idx == 2:
-            break
-    
     old_cache.print_shapes()
 
 

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import numpy as np
 import torch
 
 
@@ -23,8 +24,7 @@ class ActivationCache:
     def add_cache_keywise(self, cache, dim=0):
         for k, v in cache.store.items():
             current_v = self.store[k]
-            print(current_v.shape, v.shape)
-            self.store[k] = torch.cat([current_v, v], dim=dim)
+            self.store[k] = np.concatenate([current_v, v], axis=dim)
     
     def clear(self):
         self.store = {}
@@ -43,7 +43,7 @@ class HookedModel:
     
     def hook_transformer_layer(self, layer_index):
         def hook(module, input, output):
-            self.cache.push(f"layer_{layer_index}", output[0])
+            self.cache.push(f"layer_{layer_index}", output[0].cpu().numpy())
         return hook
     
     def add_hooks_to_model(self, model, model_name):
