@@ -20,6 +20,7 @@ class ActivationCache:
     def add_cache_keywise(self, cache, dim=0):
         for k, v in cache.store.items():
             current_v = self.store[k]
+            print(current_v.shape, v.shape)
             self.store[k] = torch.cat([current_v, v], dim=dim)
     
     def clear(self):
