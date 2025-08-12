@@ -92,9 +92,16 @@ def main(args):
         else:
             old_cache.add_cache_keywise(hooked_model.cache)
         
+        hooked_model.cache.clear()
+        
         bar.update(1)
         
     old_cache.print_shapes()
+    model_path = model_configs.model_name_to_path[args.model_name]
+    cache_save_path = os.path.join(model_path, save_path.split("/")[-1]+".pt")
+    torch.save(old_cache.store, cache_save_path)
+    print("All done!")
+
 
 
 if __name__ == "__main__":
