@@ -18,7 +18,7 @@ class ActivationCache:
         return self.store.pop(key)
     
     def add_cache_keywise(self, cache, dim=0):
-        for k, v in cache.items():
+        for k, v in cache.store.items():
             current_v = self.store[k]
             self.store[k] = torch.cat([current_v, v], dim=dim)
     
