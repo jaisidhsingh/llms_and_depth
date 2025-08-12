@@ -85,8 +85,6 @@ def main(args):
         batch = cast_batch_to_device(batch, args.device)
         outputs = hooked_model(batch)
 
-        hooked_model.cache.push("logits", outputs.logits)
-
         if old_cache is None:
             old_cache = deepcopy(hooked_model.cache)
         else:
