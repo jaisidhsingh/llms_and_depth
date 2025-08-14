@@ -34,26 +34,52 @@ class ActivationCache:
             print(k, "---", v.shape)
 
 class HookedModel:
-    def __init__(self, model, model_name):
+    def __init__(self, model, model_name, reduction="token_mean", kwargs={}):
         self.model = model
         self.model_name = model_name
         self.num_layers = None
+        self.kwargs = kwargs
         self.cache = ActivationCache()
-        self.add_hooks_to_model(model, model_name)
+
+        assert reduction in ["token_mean", "none", "sample_mean", "token_norm"], "Unsupported reduction type chosen!"
+        self.reduction = reduction
+        self.add_hooks_to_model()
     
     def hook_transformer_layer(self, layer_index):
         def hook(module, input, output):
-            self.cache.push(f"layer_{layer_index}", output[0].cpu().numpy())
+            # current shape: (B, L, D), `self.reduction` along an axis (either `L` or `B`) to the cache
+            value = output[0].cpu().numpy()
+
+            if self.reduction == "token_mean":
+                value = value.mean(axis=1)
+            elif self.reduction == "sample_mean":
+                value = value.mean(axis=0)
+            elif self.reduction == "token_norm":
+                value = np.linalg.norm(value, ord=2, axis=1)
+            
+            self.cache.push(f"layer_{layer_index}", value)
         return hook
     
-    def add_hooks_to_model(self, model, model_name):
-        if "llama" in model_name:
+    def add_hooks_to_model(self):
+        if "llama" in self.model_name:
             self.num_layers = self.model.config.num_hidden_layers
+
             for i in range(self.num_layers):
                 self.model.model.layers[i].register_forward_hook(self.hook_transformer_layer(i))
         
-        else:
-            pass
+        elif "recurrent" in self.model_name:
+            self.num_layers = self.model.config.n_layers_in_prelude \
+                + self.model.config.n_layers_in_recurent_block * self.kwargs["num_recurrent_steps"] \
+                + self.model.config.n_layers_in_coda
+            
+            for i in range(self.model.config.n_layers_in_prelude):
+                self.model.transformer.prelude[i].register_forward_hook(self.hook_transformer_layer(i))
+            
+            for j in range(self.model.config.n_layers_in_recurrent_block):
+                self.model.transformer.core_block[j].register_forward_hook(self.hook_transformer_layer(i))
+            
+            for k in range(self.model.config.n_layers_in_coda):
+                self.model.transformer.coda[k].register_forward_hook(self.hook_transformer_layer(i))
 
     def __call__(self, batch):
         return self.model(**batch) 
