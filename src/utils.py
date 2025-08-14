@@ -92,3 +92,10 @@ def collect_from_cache(cache):
     
     out = np.stack(alls)
     return out
+
+@torch.no_grad()
+def make_layerwise_gram_matrix(x, device="cuda"):
+    # shape: (num_layers, num_samples, dim)
+    x = torch.from_numpy(x).float().to(device)
+    x = torch.einsum("nbd,ncd->nbc", x, x)
+    return x

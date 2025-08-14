@@ -19,3 +19,10 @@ def plot_eigenspectrum(x, save_name):
     plt.ylabel("Eigenvalue")
     plt.title(save_name)
     plt.savefig(f"./plots/{save_name}.png")
+
+def plot_entropy(x, save_name):
+    plt.plot([i for i in range(len(x))], x)
+    plt.xlabel("Layer index")
+    plt.ylabel("Entropy")
+    plt.title(save_name)
+    plt.savefig(f"./plots/{save_name}.png")

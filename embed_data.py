@@ -78,7 +78,7 @@ def main(args):
 
     loader = DataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True, collate_fn=embed_dataset_collate_fn)
     old_cache = None
-    hooked_model = HookedModel(model, args.model_name, reduction="token_norm")
+    hooked_model = HookedModel(model, args.model_name, reduction="token_mean")
 
     bar = tqdm(total=len(loader))
     for idx, batch in enumerate(loader):
@@ -98,7 +98,7 @@ def main(args):
         
     old_cache.print_shapes()
     model_path = model_configs.model_name_to_path[args.model_name]
-    cache_save_path = os.path.join(model_path, save_path.split("/")[-1]+".pt")
+    cache_save_path = os.path.join(model_path, save_path.split("/")[-1]+"_mean.pt")
     torch.save(old_cache.store, cache_save_path)
     print("All done!")
 
