@@ -1,4 +1,5 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+import numpy as np
 import datasets
 import torch
 import os
@@ -39,7 +40,7 @@ def get_model(model_name, device):
         model.eval()
         return model
 
-    return AutoModelForCausalLM.from_pretrained(model_path, device_map=device)
+    return AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True)
 
 def embed_dataset_collate_fn(batch):
     input_ids = torch.cat([torch.tensor(item["input_ids"], dtype=torch.long).unsqueeze(0) for item in batch], dim=0)
@@ -55,3 +56,39 @@ def cast_batch_to_device(batch, device):
         batch[k] = batch[k].to(device)
     
     return batch
+
+@torch.no_grad()
+def shannon_entropy(x):
+    e = torch.linalg.eigvals(x).real
+    t = x.trace()
+    e_ = e / t
+    return -1 * (e_ * torch.log(e_)).sum().item()
+
+@torch.no_grad()
+def self_cos_sim(x, setting="token_norm", device="cuda"):
+    x = torch.from_numpy(x).float().to(device).transpose(0, 1)
+    x /= x.norm(dim=-1, keepdim=True)
+    # if `token_norm`, x.shape = (num_data_samples, num_layers, dim)
+    sim = torch.einsum("bnd,bmd->bnm", x, x)
+    return sim.mean(0).cpu().numpy()
+
+@torch.no_grad()
+def self_eigenspectrum(x, setting="token_norm", device="cuda"):
+    x = torch.from_numpy(x).float().to(device)
+    x = torch.linalg.eigvals(x).real
+    return x.cpu().numpy()
+
+def collect_from_cache(cache):
+    alls = []
+    layer_indices = [int(item.split("_")[-1]) for item in list(cache.keys())]
+    layer_indices.sort()
+
+    for i in layer_indices:
+        alls.append(
+            # np.expand_dims(
+                cache[f"layer_{i}"]
+            # , axis=0)
+        )
+    
+    out = np.stack(alls)
+    return out

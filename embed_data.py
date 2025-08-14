@@ -17,11 +17,11 @@ from src.modelling.modelling_lns_llama_1b import LlamaForCausalLM
 
 @dataclass
 class Args:
-    model_name: str = "llama-1b"
+    model_name: str = "recurrent-1b"
     dataset_name: str = "gsm8k-main"
     split: str = "test"
     device: str = "cuda"
-    batch_size: int = 32
+    batch_size: int = 16
     num_workers: int = 8
 
 @torch.no_grad()
@@ -78,7 +78,7 @@ def main(args):
 
     loader = DataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True, collate_fn=embed_dataset_collate_fn)
     old_cache = None
-    hooked_model = HookedModel(model, args.model_name)
+    hooked_model = HookedModel(model, args.model_name, reduction="token_norm")
 
     bar = tqdm(total=len(loader))
     for idx, batch in enumerate(loader):
@@ -101,7 +101,6 @@ def main(args):
     cache_save_path = os.path.join(model_path, save_path.split("/")[-1]+".pt")
     torch.save(old_cache.store, cache_save_path)
     print("All done!")
-
 
 
 if __name__ == "__main__":
