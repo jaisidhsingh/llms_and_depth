@@ -84,11 +84,7 @@ def collect_from_cache(cache):
     layer_indices.sort()
 
     for i in layer_indices:
-        alls.append(
-            # np.expand_dims(
-                cache[f"layer_{i}"]
-            # , axis=0)
-        )
+        alls.append(cache[f"layer_{i}"])
     
     out = np.stack(alls)
     return out

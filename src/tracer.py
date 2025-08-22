@@ -45,7 +45,7 @@ class HookedModel:
         self.reduction = reduction
         self.add_hooks_to_model()
     
-    def hook_transformer_layer(self, layer_index):
+    def hook_llama(self, layer_index):
         def hook(module, input, output):
             # current shape: (B, L, D), `self.reduction` along an axis (either `L` or `B`) to the cache
             value = output[0].cpu().numpy()
@@ -60,26 +60,33 @@ class HookedModel:
             self.cache.push(f"layer_{layer_index}", value)
         return hook
     
+    def hook_recurrent(self, layer_index, is_recurrent_step=False):
+        pass
+    
     def add_hooks_to_model(self):
         if "llama" in self.model_name:
             self.num_layers = self.model.config.num_hidden_layers
 
             for i in range(self.num_layers):
-                self.model.model.layers[i].register_forward_hook(self.hook_transformer_layer(i))
+                self.model.model.layers[i].register_forward_hook(self.hook_llama(i))
         
         elif "recurrent" in self.model_name:
-            self.num_layers = self.model.config.n_layers_in_prelude \
-                + self.model.config.n_layers_in_recurent_block * self.kwargs["num_recurrent_steps"] \
+            self.num_total_layers = self.model.config.n_layers_in_prelude \
+                + self.model.config.n_layers_in_recurrent_block * self.kwargs["num_recurrent_steps"] \
                 + self.model.config.n_layers_in_coda
-            
+
+            n_p = self.model.config.n_layers_in_prelude
+            n_r = self.model.config.n_layers_in_recurrent_block
+            n_c = self.model.config.n_layers_in_coda
+ 
             for i in range(self.model.config.n_layers_in_prelude):
                 self.model.transformer.prelude[i].register_forward_hook(self.hook_transformer_layer(i))
             
             for j in range(self.model.config.n_layers_in_recurrent_block):
-                self.model.transformer.core_block[j].register_forward_hook(self.hook_transformer_layer(i))
+                self.model.transformer.core_block[j].register_forward_hook(self.hook_transformer_layer(n_p + j))
             
             for k in range(self.model.config.n_layers_in_coda):
-                self.model.transformer.coda[k].register_forward_hook(self.hook_transformer_layer(i))
+                self.model.transformer.coda[k].register_forward_hook(self.hook_transformer_layer(n_p + n_r + k))
 
     def __call__(self, batch):
         return self.model(**batch) 

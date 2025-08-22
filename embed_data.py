@@ -21,8 +21,10 @@ class Args:
     dataset_name: str = "gsm8k-main"
     split: str = "test"
     device: str = "cuda"
-    batch_size: int = 16
+    batch_size: int = 4
     num_workers: int = 8
+    num_recurrent_steps: int = 8
+
 
 @torch.no_grad()
 def prepare_data(args):
@@ -78,11 +80,17 @@ def main(args):
 
     loader = DataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True, collate_fn=embed_dataset_collate_fn)
     old_cache = None
-    hooked_model = HookedModel(model, args.model_name, reduction="token_mean")
+
+    kwargs = {}
+    if "recurrent" in args.model_name:
+        kwargs["num_recurrent_steps"] = args.num_recurrent_steps
+    
+    hooked_model = HookedModel(model, args.model_name, reduction="token_mean", kwargs=kwargs)
 
     bar = tqdm(total=len(loader))
     for idx, batch in enumerate(loader):
         batch = cast_batch_to_device(batch, args.device)
+        batch["attention_mask"] = None
 
         with autocast(args.device):
             outputs = hooked_model(batch)
@@ -93,6 +101,7 @@ def main(args):
             old_cache.add_cache_keywise(hooked_model.cache)
         
         hooked_model.cache.clear()
+        old_cache.print_shapes()
         
         bar.update(1)
         
