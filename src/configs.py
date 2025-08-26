@@ -4,6 +4,7 @@ from types import SimpleNamespace
 MODELS_ROOT = "/fast/jsingh/hf_cache/models"
 DATA_ROOT = "/fast/jsingh/data"
 PROJECT_ROOT = "/home/jsingh/projects/llms-and-depth/src"
+RESULTS_ROOT = "/fast/jsingh/llm_depth/results"
 
 model_configs = SimpleNamespace(**{})
 model_configs.model_name_to_path = {

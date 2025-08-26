@@ -4,10 +4,16 @@ import datasets
 import torch
 import os
 
+from lm_eval.models.huggingface import HFLM
+import lm_eval
+
 from src.configs import model_configs
 from src.configs import data_configs
 from src.modelling.modelling_lns_llama_1b import LlamaForCausalLM
 
+"""
+Data utils
+"""
 
 def get_dataset(dataset_name, split):
     dataset_path = data_configs.dataset_to_path[dataset_name]
@@ -22,6 +28,15 @@ def get_tokenizer(model_name):
         return AutoTokenizer.from_pretrained(model_path[:-6]+"t5-base")
 
     return AutoTokenizer.from_pretrained(model_path)
+
+def embed_dataset_collate_fn(batch):
+    input_ids = torch.cat([torch.tensor(item["input_ids"], dtype=torch.long).unsqueeze(0) for item in batch], dim=0)
+    attention_mask = torch.cat([torch.tensor(item["attention_mask"], dtype=torch.long).unsqueeze(0) for item in batch], dim=0)
+    return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+"""
+Model utils
+"""
 
 def get_model(model_name, device):
     if device is None:
@@ -42,11 +57,6 @@ def get_model(model_name, device):
 
     return AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True)
 
-def embed_dataset_collate_fn(batch):
-    input_ids = torch.cat([torch.tensor(item["input_ids"], dtype=torch.long).unsqueeze(0) for item in batch], dim=0)
-    attention_mask = torch.cat([torch.tensor(item["attention_mask"], dtype=torch.long).unsqueeze(0) for item in batch], dim=0)
-    return {"input_ids": input_ids, "attention_mask": attention_mask}
-
 def cast_batch_to_device(batch, device):
     keys = ["input_ids", "attention_mask"]
     if "labels" in batch.keys():
@@ -57,26 +67,9 @@ def cast_batch_to_device(batch, device):
     
     return batch
 
-@torch.no_grad()
-def shannon_entropy(x):
-    e = torch.linalg.eigvals(x).real
-    t = x.trace()
-    e_ = e / t
-    return -1 * (e_ * torch.log(e_)).sum().item()
-
-@torch.no_grad()
-def self_cos_sim(x, setting="token_norm", device="cuda"):
-    x = torch.from_numpy(x).float().to(device).transpose(0, 1)
-    x /= x.norm(dim=-1, keepdim=True)
-    # if `token_norm`, x.shape = (num_data_samples, num_layers, dim)
-    sim = torch.einsum("bnd,bmd->bnm", x, x)
-    return sim.mean(0).cpu().numpy()
-
-@torch.no_grad()
-def self_eigenspectrum(x, setting="token_norm", device="cuda"):
-    x = torch.from_numpy(x).float().to(device)
-    x = torch.linalg.eigvals(x).real
-    return x.cpu().numpy()
+"""
+Result saving utils
+"""
 
 def collect_from_cache(cache):
     alls = []
@@ -89,9 +82,24 @@ def collect_from_cache(cache):
     out = np.stack(alls)
     return out
 
-@torch.no_grad()
-def make_layerwise_gram_matrix(x, device="cuda"):
-    # shape: (num_layers, num_samples, dim)
-    x = torch.from_numpy(x).float().to(device)
-    x = torch.einsum("nbd,ncd->nbc", x, x)
-    return x
+def save_result(result, save_name, args):
+    save_folder = os.path.join(args.results_folder, args.model_name, args.dataset_name):
+    save_path = os.path.join(save_folder, save_name)
+    torch.save(result, save_path)
+    print("Result saved at", save_path)
+
+def remove_layers_after(layer_index, model_to_modify):
+    num_layers = model_to_modify.config.num_hidden_layers
+    for i in range(layer_index+1, num_layers):
+        model.model.layers.pop(i)
+
+def evaluate_model(model, args, benchmark):
+    lm = HFLM(model, device=args.device, batch_size=args.batch_size)
+    task_manager = lm_eval.tasks.TaskManager()
+    results = lm_eval.simple_evaluate(
+        model=lm,
+        tasks=[benchmark],
+        task_manager=task_manager
+    )
+    return results
+
