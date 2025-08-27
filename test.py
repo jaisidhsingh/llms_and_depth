@@ -1,43 +1,39 @@
 import tyro
 import lm_eval
 from dataclasses import dataclass
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM
 
-from src.utils import evaluate_model, remove_layers_after
+from src.utils import get_model, evaluate_model, remove_layers_after
 
 
 @dataclass
 class TestArgs:
-    device = "mps"
-    batch_size = 4
+    device: str = "cuda"
+    batch_size: int = 4
+    model_name: str = "llama-1b"
+    benchmark: str = "gsm8k_cot_llama" 
 
-def local_macbook_test(args):
+def local_test(args):
 
-    model_path = "/Users/jaisidhsingh/Code/pretrained_llms/Llama-3.2-1B"
-    model = AutoModelForCausalLM.from_pretrained(model_path)
-    model = model.to(args.device)
-    model.eval()
+    # model_path = "/Users/jaisidhsingh/Code/pretrained_llms/Llama-3.2-1B"
+    model = get_model(args.model_name, args.device)
     print("Model loaded.")
-    print(len(model.model.layers))
+    N = len(model.model.layers)
 
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-
-    layer_to_eval = 8 # format: 1 to num_hidden_layers, NOT AN INDEX
+    layer_to_eval = N-1 # format: 1 to num_hidden_layers, NOT AN INDEX
     remove_layers_after(layer_to_eval-1, model_to_modify=model)
 
-    results = evaluate_model(model, args, benchmark="gsm8k_cot_zeroshot")
+    results = evaluate_model(model, args, benchmark=args.benchmark)
     print(results)
 
 def lm_eval_tests(args):
-    benchmark = "gsm8k_cot_zeroshot"
     tm = lm_eval.task_manager()
-    out = tm.load_task_or_group([benchmark])
-    print(out[benchmark].DATASET_PATH)
-    print(out[benchmark].DATASET_NAME)
-    # print(out)
+    out = tm.load_task_or_group([args.benchmark])
+    print(out[args.benchmark].DATASET_PATH)
+    print(out[args.benchmark].DATASET_NAME)
 
 
 if __name__ == "__main__":
     args = tyro.cli(TestArgs, default=vars(TestArgs()))
-    # local_macbook_test(args)
-    lm_eval_tests(args)
+    local_test(args)
+    # lm_eval_tests(args)

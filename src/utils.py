@@ -107,6 +107,9 @@ def evaluate_model(model, args, benchmark):
     fewshot_as_multiturn = False
     apply_chat_template = False
 
+    if "llama" in benchmark:
+        fewshot_as_multiturn = True
+
     results = lm_eval.simple_evaluate(
         model=lm,
         tasks=[benchmark],
