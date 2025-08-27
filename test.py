@@ -1,4 +1,5 @@
 import tyro
+import lm_eval
 from dataclasses import dataclass
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -27,7 +28,16 @@ def local_macbook_test(args):
     results = evaluate_model(model, args, benchmark="gsm8k_cot_zeroshot")
     print(results)
 
+def lm_eval_tests(args):
+    benchmark = "gsm8k_cot_zeroshot"
+    tm = lm_eval.task_manager()
+    out = tm.load_task_or_group([benchmark])
+    print(out[benchmark].DATASET_PATH)
+    print(out[benchmark].DATASET_NAME)
+    # print(out)
+
 
 if __name__ == "__main__":
     args = tyro.cli(TestArgs, default=vars(TestArgs()))
-    local_macbook_test(args)
+    # local_macbook_test(args)
+    lm_eval_tests(args)
