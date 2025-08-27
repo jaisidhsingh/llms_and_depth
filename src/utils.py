@@ -4,8 +4,8 @@ import datasets
 import torch
 import os
 
-from lm_eval.models.huggingface import HFLM
 import lm_eval
+from lm_eval.models.huggingface import HFLM
 
 from src.configs import model_configs
 from src.configs import data_configs
@@ -83,23 +83,35 @@ def collect_from_cache(cache):
     return out
 
 def save_result(result, save_name, args):
-    save_folder = os.path.join(args.results_folder, args.model_name, args.dataset_name):
+    save_folder = os.path.join(args.results_folder, args.model_name, args.dataset_name)
     save_path = os.path.join(save_folder, save_name)
     torch.save(result, save_path)
     print("Result saved at", save_path)
 
 def remove_layers_after(layer_index, model_to_modify):
     num_layers = model_to_modify.config.num_hidden_layers
-    for i in range(layer_index+1, num_layers):
-        model.model.layers.pop(i)
+    num_layers_to_remove = num_layers - layer_index - 1
+    for i in range(num_layers_to_remove):
+        # del model_to_modify.model.layers[i]
+        model_to_modify.model.layers.pop(-1)
+        # print(i)
+    
+    print(model_to_modify.model.layers)
 
 def evaluate_model(model, args, benchmark):
     lm = HFLM(model, device=args.device, batch_size=args.batch_size)
-    task_manager = lm_eval.tasks.TaskManager()
+    print(f"Wrapped model in HFLM as desired by `lm_eval`. Note: only single process evaluation on device=`{lm._device}`")
+
+    task_manager = lm_eval.task_manager()
+
+    fewshot_as_multiturn = False
+    apply_chat_template = False
+
     results = lm_eval.simple_evaluate(
         model=lm,
         tasks=[benchmark],
-        task_manager=task_manager
+        task_manager=task_manager,
+        fewshot_as_multiturn=fewshot_as_multiturn,
+        apply_chat_template=apply_chat_template
     )
     return results
-
