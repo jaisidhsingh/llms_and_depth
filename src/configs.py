@@ -20,5 +20,5 @@ data_configs = SimpleNamespace(**{})
 data_configs.dataset_to_path = {
     "gsm8k-main": f"{DATA_ROOT}/gsm8k-saved/gsm8k-main",
     "gsm8k-socratic": f"{DATA_ROOT}/gsm8k-saved/gsm8k-socratic",
-    "c4-10k": f"{DATA_ROOT}/c4-10k-saved"
+    "c4-10k": f"{DATA_ROOT}/c4-10k-saved/data"
 }

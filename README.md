@@ -37,3 +37,15 @@ Jaisidh Singh
 
 - Does LNS show similar entropy + layer-wise sim/perf?
 - Does LNS affect the discrete de-tokenization stage?
+
+## Forward propagation with residuals
+```
+x = input_embeds
+layer_1_out = x + f1(x) + g1(x + f1(x))
+decorrelated_layer_1_out = f1(x) + g1(x + f1(x))
+
+layer_2_out =  x + f1(x) + g1(x + f1(x)) + f2(x + f1(x) + g1(x + f1(x))) + g2(x + f1(x) + g1(x + f1(x)) + f2(x + f1(x) + g1(x + f1(x))))
+decorrelated_layer_2_out = f2(x + f1(x) + g1(x + f1(x))) + g2(x + f1(x) + g1(x + f1(x)) + f2(x + f1(x) + g1(x + f1(x))))
+
+decorrelated_layer_i_out = layer_i_out - layer_i_inp
+```

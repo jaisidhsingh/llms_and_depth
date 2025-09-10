@@ -38,24 +38,29 @@ def embed_dataset_collate_fn(batch):
 Model utils
 """
 
-def get_model(model_name, device):
+def get_model(model_name, device, get_init_model=False):
     if device is None:
         device = "auto"
-    
+
     model_path = model_configs.model_name_to_path[model_name]
     if "lns-" in model_name:
         config = AutoConfig.from_pretrained(os.path.join(model_path, "config.json"))
         model = LlamaForCausalLM(config)
         model.load_state_dict(torch.load(os.path.join(model_path, "pytorch_model.bin"), weights_only=True), strict=False)
 
-        if device == "auto":
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+    else:
+        if not get_init_model:
+            model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True)
+        else:
+            config = AutoConfig.from_pretrained(os.path.join(model_path, "config.json"))
+            model = AutoModelForCausalLM.from_config(config)
 
-        model = model.to(device)
-        model.eval()
-        return model
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    return AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True)
+    model = model.to(device)
+    model.eval()
+    return model
 
 def cast_batch_to_device(batch, device):
     keys = ["input_ids", "attention_mask"]
