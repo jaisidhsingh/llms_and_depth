@@ -9,8 +9,8 @@ from src.utils import get_model, evaluate_model, remove_layers_after
 @dataclass
 class TestArgs:
     device: str = "cuda"
-    batch_size: int = 4
-    model_name: str = "llama-1b"
+    batch_size: int = 16
+    model_name: str = "lns-llama-1b"
     benchmark: str = "gsm8k_cot_llama" 
 
 def local_test(args):
@@ -20,8 +20,8 @@ def local_test(args):
     print("Model loaded.")
     N = len(model.model.layers)
 
-    layer_to_eval = N-1 # format: 1 to num_hidden_layers, NOT AN INDEX
-    remove_layers_after(layer_to_eval-1, model_to_modify=model)
+    # layer_to_eval = N-1 # format: 1 to num_hidden_layers, NOT AN INDEX
+    # remove_layers_after(layer_to_eval-1, model_to_modify=model)
 
     results = evaluate_model(model, args, benchmark=args.benchmark)
     print(results)

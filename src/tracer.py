@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 
 class ActivationCache:
@@ -37,6 +38,7 @@ class HookedModel:
 
         assert "to_hook" in kwargs.keys(), "You haven't specified which activations to trace."
         self.kwargs = kwargs
+        print(f"Hooked activations will be decorrelated when cached: {kwargs['decorrelate']}")
 
         self.cache = ActivationCache()
 
@@ -51,13 +53,16 @@ class HookedModel:
 
 
     def hook_llama(self, layer_index, hook_subject="output"):
-        def hook(module, input_tensor, output_tensor):
+        def reduced_hook(module, input_tensor, output_tensor):
             # current shape: (B, L, D), `self.reduction` along an axis (either `L` or `B`) to the cache
-            if hook_subject == "output":
+            if hook_subject == "output" and not self.kwargs["decorrelate"]:
                 value = output_tensor[0].cpu().numpy()
 
             elif hook_subject == "input":
-                value = input_tensor.cpu().numpy()
+                value = input_tensor[0].cpu().numpy()
+            
+            elif hook_subject == "output" and self.kwargs["decorrelate"]:
+                value = (output_tensor[0] - input_tensor[0]).cpu().numpy()
 
             if self.reduction == "token_mean":
                 value = value.mean(axis=1)
@@ -67,7 +72,20 @@ class HookedModel:
                 value = np.linalg.norm(value, ord=2, axis=1)
 
             self.cache.push(f"layer_{layer_index}", value)
-        return hook
+        
+        def tokenwise_hook(module, input_tensor, output_tensor):
+            input_t = F.normalize(input_tensor[0], dim=-1)
+            output_t = F.normalize(output_tensor[0], dim=-1)
+            sim = (input_t * output_t).sum(dim=-1)
+            sim = sim.mean(dim=0).unsqueeze(0)
+            self.cache.push(f"layer_{layer_index}", sim.cpu().numpy())
+        
+        hook_name_map = {
+            "reduced": reduced_hook,
+            "tokenwise": tokenwise_hook
+        }
+
+        return hook_name_map[self.kwargs["hook_type"]]
     
     
     def add_hooks_to_model(self):

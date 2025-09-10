@@ -32,7 +32,7 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutpu
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from transformers.models.llama.configuration_llama import LlamaConfig
-
+from transformers import GenerationMixin
 
 logger = logging.get_logger(__name__)
 
@@ -1130,7 +1130,7 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
 
-class LlamaForCausalLM(LlamaPreTrainedModel):
+class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.model = LlamaModel(config)
@@ -1302,7 +1302,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     """,
     LLAMA_START_DOCSTRING,
 )
-class LlamaForSequenceClassification(LlamaPreTrainedModel):
+class LlamaForSequenceClassification(LlamaPreTrainedModel, ):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
     def __init__(self, config):

@@ -5,6 +5,7 @@ import tyro
 
 from src.utils import *
 from src.configs import *
+from src.math_utils import *
 from src.plotting_utils import *
 
 
@@ -15,7 +16,7 @@ class Args:
     split: str = "test"
     device: str = "cuda"
     reduction: str = "mean"
-    plot_metric: str = "entropy"
+    plot_metric: str = "cossims"
 
 
 def main(args):
