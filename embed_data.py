@@ -11,7 +11,7 @@ import torch
 import tyro
 import os
 
-from src.utils import *
+from src.utils import get_model, get_tokenizer, get_dataset
 from src.configs import *
 from src.math_utils import *
 from src.plotting_utils import *
@@ -47,7 +47,7 @@ def prepare_data(args):
             text = f"Question: {sample['question']}\nAnswer: {sample['answer']}"
         else:
             text = sample['text']
-        
+
         return tokenizer(text, truncation=False)
 
     tokenized_dataset = dataset.map(tokenize_function, remove_columns=dataset.column_names)
@@ -58,7 +58,7 @@ def prepare_data(args):
             text = f"Question: {sample['question']}\nAnswer: {sample['answer']}"
         else:
             text = sample['text']
-        
+
         return tokenizer(
             text,
             truncation=True,
@@ -93,64 +93,39 @@ def main(args):
         "hook_type": args.hook_type,
         "decorrelate": args.decorrelate
     }
-    
+
     hooked_model = HookedModel(model, args.model_name, reduction=args.reduction, kwargs=kwargs)
     unpadded = 0
 
     bar = tqdm(total=len(loader))
     for idx, batch in enumerate(loader):
         batch = cast_batch_to_device(batch, args.device)
-        # batch["attention_mask"] = None
-        
+
         # get an estimate of how much we've padded
         if idx == 0:
             unpadded = batch["attention_mask"].clone().float().sum(dim=1).mean(dim=0)
-        
+
         with autocast(args.device):
             outputs = hooked_model(batch)
+            del outputs
 
         if main_cache is None:
             main_cache = deepcopy(hooked_model.cache)
         else:
             main_cache.add_cache_keywise(hooked_model.cache)
-        
+
         hooked_model.cache.clear()
         bar.update(1)
-        
+
     main_cache.print_shapes()
 
     x = collect_from_cache(main_cache.store)
-    # l = 1
-    # y = x - x[l]
-    # y = self_cos_sim(y[l+1:])
-    x = self_cos_sim(x)
-    plot_desc = f"{args.model_name}-{args.dataset_name}_init_cossims"
-    # if not args.decorrelate:
-    #     plot_desc = plot_desc.replace("decorr_", f"decorr-l{l}_")
-    plot_cossims(x, plot_desc)
-    
-    # unpadded = unpadded.cpu().item()
-    # im = []
-    # for i in range(model.config.num_hidden_layers):
-    #     x = old_cache.store[f"layer_{i}"].mean(0)
-    #     im.append(np.expand_dims(x, axis=0))
-    
-    # im = np.concatenate(im, axis=0)
-    # im = im[:, :int(unpadded)]
-    # plt.figure(figsize=(6, 12))
-    # plt.imshow(im.T, aspect='auto', cmap='coolwarm', interpolation='nearest')
-    # plt.xticks([i for i in range(model.config.num_hidden_layers)])
-    # plt.ylabel("token positions (padding removed)")
-    # plt.xlabel("layers")
-    # plt.title(f"Input-Output similarity across depth\n{args.model_name}---{args.dataset_name}")
-    # plt.colorbar()
-    # plt.savefig(f"./new_plots/{args.model_name}_{args.dataset_name}_inp-out-cossims.png", bbox_inches="tight")
+    print(x.shape)
 
-    # save_path = os.path.join(RESULTS_ROOT, args.model_name, f"{args.dataset_name}-{args.split}-full-tokenized-{args.model_name}")
-    # model_path = model_configs.model_name_to_path[args.model_name]
-    # cache_save_path = os.path.join(model_path, save_path.split("/")[-1]+"_mean.pt")
-    # torch.save(old_cache.store, cache_save_path)
-    print("All done!")
+    # x = self_cos_sim(x)
+    # plot_desc = f"{args.model_name}-{args.dataset_name}_init_cossims"
+    # plot_cossims(x, plot_desc)
+    # print("All done!")
 
 if __name__ == "__main__":
     args = tyro.cli(Args, default=vars(Args))
