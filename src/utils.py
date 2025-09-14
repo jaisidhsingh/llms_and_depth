@@ -3,7 +3,6 @@ import torch
 import numpy as np
 from pathlib import Path
 from dotenv import dotenv_values
-from types import SimpleNamespace
 
 import datasets
 from torch.nn import Identity
@@ -72,10 +71,14 @@ def remove_layers_after(layer_index, model_to_modify):
     print(f"Layers {layer_index+1} to {num_layers} removed inplace.")
 
 def remove_layer_at(layer_index, model_to_modify):
-    model_to_modify.model.layers[i] = Identity()
+    model_to_modify.model.layers[layer_index] = Identity()
 
 
 # other utils
+def seed_everything(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
 def collect_from_cache(cache):
     alls = []
     layer_indices = [int(item.split("_")[-1]) for item in list(cache.keys())]

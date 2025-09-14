@@ -11,10 +11,7 @@ from dataclasses import dataclass
 from transformers import AutoConfig
 from torch.utils.data import DataLoader
 
-from src.configs import *
-from src.math_utils import *
-from src.plotting_utils import *
-from src.tracer import HookedModel
+from src.tracer import Tracer
 from src.utils import get_model, get_tokenizer, get_dataset
 
 
@@ -22,7 +19,6 @@ from src.utils import get_model, get_tokenizer, get_dataset
 def main(args):
     tokenizer = get_tokenizer(args.model_name)
     model = get_model(args.model_name, args.device, get_init_model=True)
-    autocast = torch.amp.autocast
 
     inter_folder = data_configs.dataset_to_path[args.dataset_name].split("/")[-2]
     dataset_save_path = os.path.join(DATA_ROOT, inter_folder, f"{args.dataset_name}-{args.split}-full-tokenized-{args.model_name}")
@@ -48,7 +44,7 @@ def main(args):
         if idx == 0:
             unpadded = batch["attention_mask"].clone().float().sum(dim=1).mean(dim=0)
 
-        with autocast(args.device):
+        with torch.autocast(args.device):
             outputs = hooked_model(batch)
             del outputs
 
