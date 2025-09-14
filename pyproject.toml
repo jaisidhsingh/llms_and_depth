@@ -7,9 +7,13 @@ requires-python = ">=3.11"
 dependencies = [
     "datasets==3.6.0",
     "dotenv==0.9.9",
+    "lm-eval",
     "matplotlib==3.10.1",
     "plotly==6.3.0",
     "torch==2.7.0",
     "transformers==4.49.0",
     "tyro==0.9.26",
 ]
+
+[tool.uv.sources]
+lm-eval = { path = "../lm-eval", develop = true }

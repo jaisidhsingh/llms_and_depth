@@ -2,28 +2,26 @@ import os
 import torch
 import numpy as np
 from pathlib import Path
+from copy import deepcopy
 from dotenv import dotenv_values
 
 import datasets
 from torch.nn import Identity
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
-import lm_eval
-from lm_eval.models.huggingface import HFLM
-
 
 # find our variables
-project_root = Path(__file__).resolve().parent.parent
-env_vars = dotenv_values(dotenv_path=project_root / ".env")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ENV_VARS = dotenv_values(dotenv_path=PROJECT_ROOT / ".env")
 
 # map short-hand names to path
 DATASET_NAME_TO_PATH = {
-    "gsm8k-main": f"{env_vars['DATASETS_FOLDER']}/gsm8k-saved/gsm8k-main",
-    "gsm8k-socratic": f"{env_vars['DATASETS_FOLDER']}/gsm8k-saved/gsm8k-socratic",
-    "c4-10k": f"{env_vars['DATASETS_FOLDER']}/c4-10k-saved/data",
+    "gsm8k-main": f"{ENV_VARS['DATASETS_FOLDER']}/gsm8k-saved/gsm8k-main",
+    "gsm8k-socratic": f"{ENV_VARS['DATASETS_FOLDER']}/gsm8k-saved/gsm8k-socratic",
+    "c4-10k": f"{ENV_VARS['DATASETS_FOLDER']}/c4-10k-saved/data",
 }
 MODEL_NAME_TO_PATH = {
-    "llama-1b": f"{env_vars['PRETRAINED_MODELS_FOLDER']}/Llama-3.2-1B"
+    "llama-1b": f"{ENV_VARS['PRETRAINED_MODELS_FOLDER']}/Llama-3.2-1B"
 }
 
 
@@ -98,25 +96,15 @@ def save_result(result, save_name, args):
     torch.save(result, save_path)
     print("Result saved at", save_path)
 
+def split_args(args):
+    metrics = set(args.metrics.split(","))
+    all_eval_metrics = set(["layer_skip_extrinsic", "layer_skip_intrinsic"])
 
-# eval utils
-def evaluate_model(model, args, benchmark):
-    lm = HFLM(model, device=args.device, batch_size=args.batch_size)
-    print(f"Wrapped model in HFLM as desired by `lm_eval`. Note: only single process evaluation on device=`{lm._device}`")
+    eval_metrics = metrics.intersection(all_eval_metrics)
+    non_eval_metrics = metrics - eval_metrics
 
-    task_manager = lm_eval.task_manager()
+    non_eval_args, eval_args = deepcopy(args), deepcopy(args)
+    non_eval_args.metrics = ",".join(list(non_eval_metrics))
+    eval_args.metrics = ",".join(list(eval_metrics))
 
-    fewshot_as_multiturn = False
-    apply_chat_template = False
-
-    if "llama" in benchmark:
-        fewshot_as_multiturn = True
-
-    results = lm_eval.simple_evaluate(
-        model=lm,
-        tasks=[benchmark],
-        task_manager=task_manager,
-        fewshot_as_multiturn=fewshot_as_multiturn,
-        apply_chat_template=apply_chat_template
-    )
-    return results
+    return non_eval_args, eval_args
