@@ -1,32 +1,43 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
-import numpy as np
-import datasets
-import torch
 import os
+import torch
+import numpy as np
+from pathlib import Path
+from dotenv import dotenv_values
+from types import SimpleNamespace
+
+import datasets
+from torch.nn import Identity
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
 import lm_eval
 from lm_eval.models.huggingface import HFLM
 
-from src.configs import model_configs
-from src.configs import data_configs
-from src.modelling.modelling_lns_llama_1b import LlamaForCausalLM
 
-"""
-Data utils
-"""
+# find our variables
+project_root = Path(__file__).resolve().parent.parent
+env_vars = dotenv_values(dotenv_path=project_root / ".env")
 
+# map short-hand names to path
+DATASET_NAME_TO_PATH = {
+    "gsm8k-main": f"{env_vars['DATASETS_FOLDER']}/gsm8k-saved/gsm8k-main",
+    "gsm8k-socratic": f"{env_vars['DATASETS_FOLDER']}/gsm8k-saved/gsm8k-socratic",
+    "c4-10k": f"{env_vars['DATASETS_FOLDER']}/c4-10k-saved/data",
+}
+MODEL_NAME_TO_PATH = {
+    "llama-1b": f"{env_vars['PRETRAINED_MODELS_FOLDER']}/Llama-3.2-1B"
+}
+
+
+# data utils
 def get_dataset(dataset_name, split):
-    dataset_path = data_configs.dataset_to_path[dataset_name]
+    dataset_path = DATASET_NAME_TO_PATH[dataset_name]
     if dataset_name == "c4-10k":
         split = "train" # has no test split
     dataset = datasets.load_from_disk(dataset_path)[split]
     return dataset
 
 def get_tokenizer(model_name):
-    model_path = model_configs.model_name_to_path[model_name]
-    if "lns-" in model_name:
-        return AutoTokenizer.from_pretrained(model_path[:-6]+"t5-base")
-
+    model_path = MODEL_NAME_TO_PATH[model_name]
     return AutoTokenizer.from_pretrained(model_path)
 
 def embed_dataset_collate_fn(batch):
@@ -34,48 +45,37 @@ def embed_dataset_collate_fn(batch):
     attention_mask = torch.cat([torch.tensor(item["attention_mask"], dtype=torch.long).unsqueeze(0) for item in batch], dim=0)
     return {"input_ids": input_ids, "attention_mask": attention_mask}
 
-"""
-Model utils
-"""
+def cast_batch_to_device(batch, device):
+    for k, v in batch.items():
+        batch[k] = v.to(device)
+    return batch
 
+
+# model utils
 def get_model(model_name, device, get_init_model=False):
-    if device is None:
-        device = "auto"
-
-    model_path = model_configs.model_name_to_path[model_name]
-    if "lns-" in model_name:
-        config = AutoConfig.from_pretrained(os.path.join(model_path, "config.json"))
-        model = LlamaForCausalLM(config)
-        model.load_state_dict(torch.load(os.path.join(model_path, "pytorch_model.bin"), weights_only=True), strict=False)
-
+    model_path = MODEL_NAME_TO_PATH[model_name]
+    if not get_init_model:
+        model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True)
     else:
-        if not get_init_model:
-            model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True)
-        else:
-            config = AutoConfig.from_pretrained(os.path.join(model_path, "config.json"))
-            model = AutoModelForCausalLM.from_config(config)
-
-    if device == "auto":
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        config = AutoConfig.from_pretrained(os.path.join(model_path, "config.json"))
+        model = AutoModelForCausalLM.from_config(config)
 
     model = model.to(device)
     model.eval()
     return model
 
-def cast_batch_to_device(batch, device):
-    keys = ["input_ids", "attention_mask"]
-    if "labels" in batch.keys():
-        keys.append("labels")
-    
-    for k in keys:
-        batch[k] = batch[k].to(device)
-    
-    return batch
+def remove_layers_after(layer_index, model_to_modify):
+    num_layers = model_to_modify.config.num_hidden_layers
+    for i in range(layer_index+1, num_layers):
+        model_to_modify.model.layers[i] = Identity()
 
-"""
-Result saving utils
-"""
+    print(f"Layers {layer_index+1} to {num_layers} removed inplace.")
 
+def remove_layer_at(layer_index, model_to_modify):
+    model_to_modify.model.layers[i] = Identity()
+
+
+# other utils
 def collect_from_cache(cache):
     alls = []
     layer_indices = [int(item.split("_")[-1]) for item in list(cache.keys())]
@@ -83,26 +83,20 @@ def collect_from_cache(cache):
 
     for i in layer_indices:
         alls.append(cache[f"layer_{i}"])
-    
+
     out = np.stack(alls)
     return out
 
 def save_result(result, save_name, args):
     save_folder = os.path.join(args.results_folder, args.model_name, args.dataset_name)
+    os.makedirs(save_folder, exist_ok=True)
+
     save_path = os.path.join(save_folder, save_name)
     torch.save(result, save_path)
     print("Result saved at", save_path)
 
-def remove_layers_after(layer_index, model_to_modify):
-    num_layers = model_to_modify.config.num_hidden_layers
-    num_layers_to_remove = num_layers - layer_index - 1
-    for i in range(num_layers_to_remove):
-        # del model_to_modify.model.layers[i]
-        model_to_modify.model.layers.pop(-1)
-        # print(i)
-    
-    print(model_to_modify.model.layers)
 
+# eval utils
 def evaluate_model(model, args, benchmark):
     lm = HFLM(model, device=args.device, batch_size=args.batch_size)
     print(f"Wrapped model in HFLM as desired by `lm_eval`. Note: only single process evaluation on device=`{lm._device}`")
