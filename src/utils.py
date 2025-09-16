@@ -1,5 +1,6 @@
 import os
 import torch
+import random
 import numpy as np
 from pathlib import Path
 from copy import deepcopy
@@ -7,6 +8,7 @@ from dotenv import dotenv_values
 
 import datasets
 from torch.nn import Identity
+from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
 
@@ -75,7 +77,11 @@ def remove_layer_at(layer_index, model_to_modify):
 # other utils
 def seed_everything(seed):
     torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
     np.random.seed(seed)
+    random.seed(seed)
 
 def collect_from_cache(cache):
     alls = []

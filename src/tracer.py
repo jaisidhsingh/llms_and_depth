@@ -70,7 +70,7 @@ class Tracer:
 
     def llama_hooks(self, layer_index, metric):
         # separate hook for each metric
-        # hooks can't be used for layer dropping of course
+        # hooks can't be used for layer dropping
 
         @torch.no_grad()
         def input_output_cosine_sim(module, input_tensor, output_tensor):
