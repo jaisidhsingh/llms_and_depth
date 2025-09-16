@@ -90,7 +90,7 @@ def get_model(model_name, device, get_init_model=False, on_colab=False):
             model_id = MODEL_TO_HF_ID[model_name]
             model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device, trust_remote_code=True)
     else:
-        if not on colab:
+        if not on_colab:
             config = AutoConfig.from_pretrained(os.path.join(model_path, "config.json"))
         else:
             model_id = MODEL_TO_HF_ID[model_name]
