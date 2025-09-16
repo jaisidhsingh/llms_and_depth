@@ -1,4 +1,5 @@
-from src.utils import get_tokenizer
+from src.utils import *
+from src.tracer import *
 from src.cli import Args
 
-print("working.")
+print("Imports work.")

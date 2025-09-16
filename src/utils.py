@@ -1,4 +1,5 @@
 import os
+import json
 import torch
 import random
 import numpy as np
@@ -28,11 +29,20 @@ MODEL_NAME_TO_PATH = {
 
 
 # data utils
+def map_gsm8k_inputs(sample):
+    answer = sample['answer'].replace("####", "Final answer value = ")
+    return {"input_text" : f"QUESTION: {sample['question']}  ANSWER: {answer}"}
+
+def map_c4_inputs(sample):
+    return sample
+
 def get_dataset(dataset_name, split):
     dataset_path = DATASET_NAME_TO_PATH[dataset_name]
     if dataset_name == "c4-10k":
         split = "train" # has no test split
     dataset = datasets.load_from_disk(dataset_path)[split]
+    map_func = map_gsm8k_inputs if "gsm8k" in dataset_name else map_c4_inputs
+    dataset = dataset.map(map_func, drop_columns=dataset.column_names)
     return dataset
 
 def get_tokenizer(model_name):
@@ -94,6 +104,9 @@ def collect_from_cache(cache):
     out = np.stack(alls)
     return out
 
+def create_experiment_name(args):
+    return f"{args.model_name}_{args.dataset_name}_{args.metrics}_seed-{args.random_seed}"
+
 def save_result(result, save_name, args):
     save_folder = os.path.join(args.results_folder, args.model_name, args.dataset_name)
     os.makedirs(save_folder, exist_ok=True)
@@ -109,8 +122,41 @@ def split_args(args):
     eval_metrics = metrics.intersection(all_eval_metrics)
     non_eval_metrics = metrics - eval_metrics
 
-    non_eval_args, eval_args = deepcopy(args), deepcopy(args)
-    non_eval_args.metrics = ",".join(list(non_eval_metrics))
-    eval_args.metrics = ",".join(list(eval_metrics))
+    non_eval_args, eval_args = None, None
+
+    if len(list(non_eval_metrics)) > 0:
+        non_eval_args = deepcopy(args)
+        non_eval_args.metrics = ",".join(list(non_eval_metrics))
+
+    if len(list(eval_metrics)) > 0:
+        eval_args = deepcopy(args)
+        eval_args.metrics = ",".join(list(eval_metrics))
 
     return non_eval_args, eval_args
+
+def save_metrics(metrics, args):
+    name = create_experiment_name(args)
+    result_save_path = os.path.join(args.results_folder, f"{name}.pt")
+    torch.save(metrics, result_save_path)
+
+    config_save_path = os.path.join(args.config_folder, f"{name}.json")
+    with open(config_save_path, "w") as f:
+        json.dump(vars(args), f)
+
+    print(f"Results saved at {results_save_path}")
+    print(f"Config to reproduce results saved at {config_save_path}")
+
+def plot_metrics(metrics, args):
+    pass
+
+def collect_metrics(metrics_list):
+    tmp = metrics_list[0]
+    rows = tmp.keys()
+    for item in metrics_list[1:]:
+        for k in rows:
+            for kk, vv in item[k].items():
+                tmp[k][kk] = vv
+    return tmp
+
+def get_metrics_from_cache(cache):
+    return cache.data

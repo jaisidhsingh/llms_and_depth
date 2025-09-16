@@ -13,16 +13,14 @@ class BaseArgs(ABC):
 @dataclass
 class Args(BaseArgs):
     # global settings
-    random_seed: int = 0
+    random_seed: int = 123
     device: str = "cuda"
     results_folder = ENV_VARS["RESULTS_FOLDER"]
+    config_folder = ENV_VARS["CONFIGS_FOLDER"]
 
     # model settings
     model_name: str = "llama-1b"
-    to_hook: str = "layer_output"
-    hook_type: str = "reduced"
-    reduction: str = "token_norm"
-    decorrelate: bool = False
+    metrics: str = "input_output_cossim,batch_entropy,attn_rank"
 
     # data settings
     dataset_name: str = "gsm8k-main"
