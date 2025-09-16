@@ -15,8 +15,9 @@ class Args(BaseArgs):
     # global settings
     random_seed: int = 123
     device: str = "cuda"
-    results_folder = ENV_VARS["RESULTS_FOLDER"]
-    config_folder = ENV_VARS["CONFIGS_FOLDER"]
+    results_folder: str = ENV_VARS["RESULTS_FOLDER"]
+    config_folder:str = ENV_VARS["CONFIGS_FOLDER"]
+    on_colab: bool = False
 
     # model settings
     model_name: str = "llama-1b"

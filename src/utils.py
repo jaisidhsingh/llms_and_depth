@@ -26,6 +26,13 @@ DATASET_NAME_TO_PATH = {
 MODEL_NAME_TO_PATH = {
     "llama-1b": f"{ENV_VARS['PRETRAINED_MODELS_FOLDER']}/Llama-3.2-1B"
 }
+DATASET_TO_HF_ID = {
+    "gsm8k-main": "openai/gsm8k",
+    "gsm8k-socratic": "openai/gsm8k",
+}
+MODEL_TO_HF_ID = {
+    "llama-1b": "meta-llama/Llama-3.2-1B"
+}
 
 
 # data utils
@@ -36,18 +43,31 @@ def map_gsm8k_inputs(sample):
 def map_c4_inputs(sample):
     return sample
 
-def get_dataset(dataset_name, split):
+def get_dataset(dataset_name, split, on_colab=False):
     dataset_path = DATASET_NAME_TO_PATH[dataset_name]
     if dataset_name == "c4-10k":
         split = "train" # has no test split
-    dataset = datasets.load_from_disk(dataset_path)[split]
-    map_func = map_gsm8k_inputs if "gsm8k" in dataset_name else map_c4_inputs
-    dataset = dataset.map(map_func, drop_columns=dataset.column_names)
+
+    if not on_colab:
+        dataset = datasets.load_from_disk(dataset_path)[split]
+        map_func = map_gsm8k_inputs if "gsm8k" in dataset_name else map_c4_inputs
+        dataset = dataset.map(map_func, drop_columns=dataset.column_names)
+    else:
+        dataset_id = DATASET_TO_HF_ID[dataset_name]
+        if "gsm8k" in dataset_name:
+            data_type = dataset_name.split("-")[1]
+            dataset = datasets.load_dataset(dataset_id, data_type, split=split)
+        else:
+            dataset = datasets.load_dataset(dataset_id, split=split)
     return dataset
 
-def get_tokenizer(model_name):
-    model_path = MODEL_NAME_TO_PATH[model_name]
-    return AutoTokenizer.from_pretrained(model_path)
+def get_tokenizer(model_name, on_colab=False):
+    if not on_colab:
+        model_path = MODEL_NAME_TO_PATH[model_name]
+        return AutoTokenizer.from_pretrained(model_path)
+    else:
+        model_id = MODEL_TO_HF_ID[model_name]
+        return AutoTokenizer.from_pretrained(model_id)
 
 def embed_dataset_collate_fn(batch):
     input_ids = torch.cat([torch.tensor(item["input_ids"], dtype=torch.long).unsqueeze(0) for item in batch], dim=0)
@@ -61,12 +81,21 @@ def cast_batch_to_device(batch, device):
 
 
 # model utils
-def get_model(model_name, device, get_init_model=False):
-    model_path = MODEL_NAME_TO_PATH[model_name]
+def get_model(model_name, device, get_init_model=False, on_colab=False):
     if not get_init_model:
-        model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True)
+        if not on_colab:
+            model_path = MODEL_NAME_TO_PATH[model_name]
+            model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True)
+        else:
+            model_id = MODEL_TO_HF_ID[model_name]
+            model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device, trust_remote_code=True)
     else:
-        config = AutoConfig.from_pretrained(os.path.join(model_path, "config.json"))
+        if not on colab:
+            config = AutoConfig.from_pretrained(os.path.join(model_path, "config.json"))
+        else:
+            model_id = MODEL_TO_HF_ID[model_name]
+            config = AutoConfig.from_pretrained(model_id)
+
         model = AutoModelForCausalLM.from_config(config)
 
     model = model.to(device)

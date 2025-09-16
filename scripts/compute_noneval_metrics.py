@@ -9,15 +9,15 @@ from src.tracer import Tracer, LayerWiseMetricCache
 
 
 def compute_non_eval_metrics(args):
-    tokenizer = get_tokenizer(args.model_name)
+    tokenizer = get_tokenizer(args.model_name, on_colab=args.on_colab)
     print(f"loaded tokenizer for {args.model_name}.")
     return
 
-    model = get_model(args.model_name, args.device)
+    model = get_model(args.model_name, args.device, on_colab=args.on_colab)
     print(f"loaded model {args.model_name}.")
     print(model)
 
-    dataset = get_dataset(args.dataset_name, "test")
+    dataset = get_dataset(args.dataset_name, "test", on_colab=args.on_colab)
     print(f"{args.dataset_name} of {len(dataset)} samples loaded.")
 
     loader = DataLoader(
