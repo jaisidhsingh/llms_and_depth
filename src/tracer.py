@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-
+from copy import deepcopy
 import src.metrics as metrics
 
 
@@ -12,9 +12,6 @@ class LayerWiseMetricCache:
         self.data = cache
         self.is_finalised = False
 
-    def __idx__(self, key):
-        return self.data[key]
-
     @torch.no_grad()
     def push(self, row, col, val):
         if not row in self.data.keys():
@@ -24,15 +21,13 @@ class LayerWiseMetricCache:
         elif not col in self.data[row].keys():
                 self.data[row][col] = []
 
-        self.data[row][col].append(val)
+        self.data[row][col].append(val.clone())
 
     @torch.no_grad()
     def push_from_cache(self, cache):
         for crow, ccol in cache.data.items():
             for k, v in ccol.items():
-                if not v[0].device == "cpu":
-                    v[0] = v[0].cpu()
-                self.data[crow][k].append(v[0])
+                self.push(crow, k, deepcopy(v[0]))
 
     @torch.no_grad()
     def finalize(self, reduce=True):
@@ -44,7 +39,7 @@ class LayerWiseMetricCache:
         self.is_finalised = True
 
     def clear(self):
-        self.data = {}
+        self.data.clear()
 
     def print_shapes(self):
         if self.is_finalised:
@@ -82,15 +77,20 @@ class Tracer:
 
         @torch.no_grad()
         def batch_entropy(module, input_tensor, output_tensor):
-            token_mean_output = output_tensor[0].mean(dim=1) # shape: [B, D]
+            bs = output_tensor[0].shape[0]
+            if bs > 1:
+                token_mean_output = output_tensor[0].mean(dim=1) # shape: [B, D]
+            else:
+                token_mean_output = output_tensor[0].squeeze(dim=0) # shape [L, D]
             gram = token_mean_output @ token_mean_output.T
-            ent = metrics.shannon_entropy(gram)
-            self.cache.push(f"layer_{layer_index}", "batch_entropy", ent)
+            ent = metrics.shannon_entropy(gram, device=self.config.device)
+            self.cache.push(f"layer_{layer_index}", "batch_entropy", ent.unsqueeze(0))
 
         @torch.no_grad()
         def attn_rank(module, input_tensor, output_tensor):
             assert len(output_tensor) > 1, "Attention weights are not returned by the attention layer, cannot compute `attention_rank`"
-            batch_attn_rank = torch.linalg.matrix_rank(output_tensor[1]).mean(dim=-1)
+            heads_attn_rank = torch.linalg.matrix_rank(output_tensor[1]).float()
+            batch_attn_rank = heads_attn_rank.mean(dim=-1)
             self.cache.push(f"layer_{layer_index}", "attn_rank", batch_attn_rank.cpu())
 
         metric_to_hook_map = {
@@ -118,16 +118,23 @@ class Tracer:
                         self.active_hooks[row][metric] = self.model.model.layers[i].register_forward_hook(
                             self.llama_hooks(i, metric)
                         )
+                        # self.model.model.layers[i].register_forward_hook(
+                        #     self.llama_hooks(i, metric)
+                        # )
                     else:
                         self.active_hooks[row]["attn_rank"] = self.model.model.layers[i].self_attn.register_forward_hook(
                             self.llama_hooks(i, "attn_rank")
                         )
+                        # self.model.model.layers[i].self_attn.register_forward_hook(
+                        #     self.llama_hooks(i, "attn_rank")
+                        # )
 
     def remove_all_hooks(self):
         for k, v in self.active_hooks.items():
             for kk in v.keys():
                 self.active_hooks[k][kk].remove()
-                del self.active_hooks[k][kk]
+
+        self.active_hooks.clear()
 
     def __call__(self, batch):
-        return self.model(**batch)
+        return self.model(**batch, output_attentions="attn_rank" in self.config.metrics)

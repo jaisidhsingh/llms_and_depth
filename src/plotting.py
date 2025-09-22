@@ -6,34 +6,41 @@ import plotly.io as pio
 import os
 
 from src.tracer import LayerWiseMetricCache
+from src.utils import create_experiment_name
 
 
-def plot_cossims(x, save_name):
-    plt.imshow(x, cmap="plasma", vmin=0, vmax=1)
-    plt.colorbar()
-    plt.xlabel("Layer index")
-    plt.ylabel("Layer index")
-    plt.title(save_name)
-    plt.savefig(f"./plots/{save_name}.png")
+def normalize_values(x):
+    min_, max_ = x.min(axis=0), x.max(axis=0)
+    return x - min_ / (max_ - min_)
 
-def plot_eigenspectrum(x, save_name):
-    x = x.tolist()
-    x.sort()
-    plt.plot([i for i in range(len(x))], x)
-    plt.xlabel("Number of eigenvalues")
-    plt.ylabel("Eigenvalue")
-    plt.title(save_name)
-    plt.savefig(f"./plots/{save_name}.png")
+def plot_metrics(metrics, args):
+    layers = list(metrics.keys())
+    x = [i+1 for i in range(len(layers))]
+    metric_names = args.metrics.split(",")
+    data = {m : [] for m in metric_names}
 
-def plot_entropy(x, save_name):
-    plt.plot([i for i in range(len(x))], x)
-    plt.xlabel("Layer index")
-    plt.ylabel("Entropy")
-    plt.title(save_name)
-    plt.savefig(f"./plots/{save_name}.png")
+    for m in metric_names:
+        for l in layers:
+            data[m].append(metrics[l][m].item())
+
+        data[m] = np.array(data[m]).astype(np.float32)
+
+    plt.plot(x, data[m], label=m)
+    fig, axes = plt.subplots(1, len(metric_names), figsize=(15, 6))
+    for idx, m in enumerate(metric_names):
+        axes[idx].plot(x, data[m], label=m)
+        axes[idx].set_xlabel("Depth")
+        axes[idx].set_ylabel(f"{m} metric value")
+        axes[idx].legend()
+        axes[idx].set_title(m)
+
+    name = create_experiment_name(args)
+    save_path = os.path.join(args.results_folder, f"{name}.png")
+    plt.savefig(save_path, bbox_inches="tight", dpi=300)
+    print(f"Metrics plotted at {save_path}")
 
 
-class Plotter:
+class InteractivePlotter:
     def __init__(self, cache: LayerWiseMetricCache, out_dir="plots/interactive"):
         self.cache = cache
         self.out_dir = out_dir

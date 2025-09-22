@@ -16,6 +16,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 # find our variables
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_VARS = dotenv_values(dotenv_path=PROJECT_ROOT / ".env")
+assert os.path.exists(ENV_VARS['RESULTS_FOLDER']) and os.path.exists(ENV_VARS['CONFIGS_FOLDER']), "Specified folders do not exist"
 
 # map short-hand names to path
 DATASET_NAME_TO_PATH = {
@@ -59,15 +60,25 @@ def get_dataset(dataset_name, split, on_colab=False):
             dataset = datasets.load_dataset(dataset_id, data_type, split=split)
         else:
             dataset = datasets.load_dataset(dataset_id, split=split)
+
+        map_func = map_gsm8k_inputs if "gsm8k" in dataset_name else map_c4_inputs
+        dataset = dataset.map(map_func, remove_columns=dataset.column_names)
+
     return dataset
 
 def get_tokenizer(model_name, on_colab=False):
     if not on_colab:
         model_path = MODEL_NAME_TO_PATH[model_name]
-        return AutoTokenizer.from_pretrained(model_path)
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
     else:
         model_id = MODEL_TO_HF_ID[model_name]
-        return AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.pad_token = tokenizer.eos_token
+
+    return tokenizer
 
 def embed_dataset_collate_fn(batch):
     input_ids = torch.cat([torch.tensor(item["input_ids"], dtype=torch.long).unsqueeze(0) for item in batch], dim=0)
@@ -91,6 +102,7 @@ def get_model(model_name, device, get_init_model=False, on_colab=False):
             model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device, trust_remote_code=True)
     else:
         if not on_colab:
+            model_path = MODEL_NAME_TO_PATH[model_name]
             config = AutoConfig.from_pretrained(os.path.join(model_path, "config.json"))
         else:
             model_id = MODEL_TO_HF_ID[model_name]
@@ -116,9 +128,6 @@ def remove_layer_at(layer_index, model_to_modify):
 # other utils
 def seed_everything(seed):
     torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-
     np.random.seed(seed)
     random.seed(seed)
 
@@ -172,11 +181,8 @@ def save_metrics(metrics, args):
     with open(config_save_path, "w") as f:
         json.dump(vars(args), f)
 
-    print(f"Results saved at {results_save_path}")
+    print(f"Results saved at {result_save_path}")
     print(f"Config to reproduce results saved at {config_save_path}")
-
-def plot_metrics(metrics, args):
-    pass
 
 def collect_metrics(metrics_list):
     tmp = metrics_list[0]
@@ -186,6 +192,3 @@ def collect_metrics(metrics_list):
             for kk, vv in item[k].items():
                 tmp[k][kk] = vv
     return tmp
-
-def get_metrics_from_cache(cache):
-    return cache.data
