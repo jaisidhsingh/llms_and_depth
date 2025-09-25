@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from copy import deepcopy
 import src.metrics as metrics
+import weightwatcher as ww
 
 
 class LayerWiseMetricCache:
@@ -135,6 +136,24 @@ class Tracer:
                 self.active_hooks[k][kk].remove()
 
         self.active_hooks.clear()
+
+    def attach_weightwatcher(self):
+        watcher = ww.WeightWatcher(model=self.model)
+        details = watcher.analyze()
+        summary = watcher.get_summary(details)
+
+        ww_metrics = [m in self.config.metrics.split(",") if "ww_alpha" in m]
+        for metric in ww_metrics:
+            col = summary[metric]
+
+            if "llama" in self.model_name:
+                num_layers = self.model.config.num_hidden_layers
+            else:
+                num_layers = len(self.model.model.layers)
+
+            for i in range(num_layers):
+                self.cache.push(f"layer_{i}", metric, torch.tensor([col[i]], dtype=torch.float32, device="cpu"))
+
 
     def __call__(self, batch):
         return self.model(**batch, output_attentions="attn_rank" in self.config.metrics)

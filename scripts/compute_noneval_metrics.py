@@ -1,5 +1,6 @@
 import tyro
 from tqdm import tqdm
+import weightwatcher as ww
 from transformers import DataCollatorWithPadding
 from torch.utils.data import DataLoader
 
@@ -41,7 +42,12 @@ def compute_non_eval_metrics(args):
         if idx == 0:
             break
 
+
     traced_model.remove_all_hooks()
+
+    if ",ww_alpha" in args.metrics:
+        traced_model.attach_weightwatcher()
+
     traced_model.cache.finalize()
     traced_model.cache.print_shapes()
 

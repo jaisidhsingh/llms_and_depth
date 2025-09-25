@@ -13,7 +13,8 @@ dependencies = [
     "torch==2.7.0",
     "transformers==4.49.0",
     "tyro==0.9.26",
+    "weightwatcher>=0.7.5.5",
 ]
 
 [tool.uv.sources]
-lm-eval = { path = "../lm-eval", develop = true }
+lm-eval = { path = "../lm-eval" }
