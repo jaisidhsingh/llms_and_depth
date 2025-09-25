@@ -14,17 +14,17 @@ class BaseArgs(ABC):
 class Args(BaseArgs):
     # global settings
     random_seed: int = 123
-    device: str = "cpu"
+    device: str = "cuda"
     results_folder = ENV_VARS["RESULTS_FOLDER"]
     config_folder = ENV_VARS["CONFIGS_FOLDER"]
-    on_colab: bool = True
+    on_colab: bool = False
 
     # model settings
-    model_name: str = "llama-1b"
-    metrics: str = "input_output_cossim,batch_entropy,attn_rank"
+    model_name: str = "llama3.2-1b"
+    metrics: str = "input_output_cossim,batch_entropy,ww_alpha"
 
     # data settings
     dataset_name: str = "gsm8k-main"
     split: str = "test"
-    batch_size: int = 2
+    batch_size: int = 16
     num_workers: int = 8

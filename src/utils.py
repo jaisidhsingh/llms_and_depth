@@ -25,16 +25,30 @@ DATASET_NAME_TO_PATH = {
     "c4-10k": f"{ENV_VARS['DATASETS_FOLDER']}/c4-10k-saved/data",
 }
 MODEL_NAME_TO_PATH = {
-    "llama-1b": f"{ENV_VARS['PRETRAINED_MODELS_FOLDER']}/Llama-3.2-1B"
+    "llama3.2-1b": f"{ENV_VARS['PRETRAINED_MODELS_FOLDER']}/Llama-3.2-1B",
+    "qwen3-0.6b": f"{ENV_VARS['PRETRAINED_MODELS_FOLDER']}/Qwen3-0.6B-Base",
+    "qwen3-0.6b-it": f"{ENV_VARS['PRETRAINED_MODELS_FOLDER']}/Qwen3-0.6B",
+    "gemma3-1b-pt": f"{ENV_VARS['PRETRAINED_MODELS_FOLDER']}/gemma-3-1b-pt",
+    "gemma3-1b-it": f"{ENV_VARS['PRETRAINED_MODELS_FOLDER']}/gemma-3-1b-it",
+    "gemma2-2b": f"{ENV_VARS['PRETRAINED_MODELS_FOLDER']}/gemma-2-2b",
 }
 DATASET_TO_HF_ID = {
     "gsm8k-main": "openai/gsm8k",
     "gsm8k-socratic": "openai/gsm8k",
 }
 MODEL_TO_HF_ID = {
-    "llama-1b": "meta-llama/Llama-3.2-1B"
+    "llama3.2-1b": "meta-llama/Llama-3.2-1B"
 }
 
+# model_name: num_attn_linear_layers + num_mlp_linear_layers
+MODEL_TO_LAYER_DIV = {
+    "llama3.2-1b": 4 + 3,
+    "qwen3-0.6b": 4 + 3,
+    "qwen3-0.6b-it": 4 + 3,
+    "gemma3-1b-pt": 4 + 3,
+    "gemma3-1b-it": 4 + 3,
+    "gemma2-2b": 4 + 3,
+}
 
 # data utils
 def map_gsm8k_inputs(sample):
@@ -52,7 +66,7 @@ def get_dataset(dataset_name, split, on_colab=False):
     if not on_colab:
         dataset = datasets.load_from_disk(dataset_path)[split]
         map_func = map_gsm8k_inputs if "gsm8k" in dataset_name else map_c4_inputs
-        dataset = dataset.map(map_func, drop_columns=dataset.column_names)
+        dataset = dataset.map(map_func, remove_columns=dataset.column_names)
     else:
         dataset_id = DATASET_TO_HF_ID[dataset_name]
         if "gsm8k" in dataset_name:
@@ -96,10 +110,10 @@ def get_model(model_name, device, get_init_model=False, on_colab=False):
     if not get_init_model:
         if not on_colab:
             model_path = MODEL_NAME_TO_PATH[model_name]
-            model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True)
+            model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True, torch_dtype=torch.float32)
         else:
             model_id = MODEL_TO_HF_ID[model_name]
-            model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device, trust_remote_code=True)
+            model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device, trust_remote_code=True, torch_dtype=torch.float32)
     else:
         if not on_colab:
             model_path = MODEL_NAME_TO_PATH[model_name]
@@ -108,7 +122,7 @@ def get_model(model_name, device, get_init_model=False, on_colab=False):
             model_id = MODEL_TO_HF_ID[model_name]
             config = AutoConfig.from_pretrained(model_id)
 
-        model = AutoModelForCausalLM.from_config(config)
+        model = AutoModelForCausalLM.from_config(config, torch_dtype=torch.float32)
 
     model = model.to(device)
     model.eval()
@@ -130,6 +144,18 @@ def seed_everything(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+def print_intro(args):
+    print("#"*50)
+    print(f"# Model: {args.model_name}")
+    print(f"# Dataset: {args.dataset_name}, split: {args.split}")
+    print(f"# Using device: {args.device}")
+    print(f"# Computing metrics: {args.metrics}")
+    print(f"# Batch size: {args.batch_size}")
+    print(f"# Num workers: {args.num_workers}")
+    print(f"# Random seed: {args.random_seed}")
+    print("#"*50)
+    print(" ")
 
 def collect_from_cache(cache):
     alls = []

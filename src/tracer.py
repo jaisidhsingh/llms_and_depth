@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from copy import deepcopy
 import src.metrics as metrics
+from src.utils import MODEL_TO_LAYER_DIV
 import weightwatcher as ww
 
 
@@ -64,7 +65,7 @@ class Tracer:
         name = f"{self.config.dataset_name}-{self.config.split}_{self.config.model_name}_{self.config.to_hook}-{self.config.reduction}"
         return name
 
-    def llama_hooks(self, layer_index, metric):
+    def all_hooks(self, layer_index, metric):
         # separate hook for each metric
         # hooks can't be used for layer dropping
 
@@ -102,33 +103,27 @@ class Tracer:
         return metric_to_hook_map[metric]
 
     def add_hooks_to_model(self):
-        if "llama-" in self.model_name:
-            num_layers = self.model.config.num_hidden_layers
-            metrics = self.config.metrics.split(",")
+        num_layers = self.model.config.num_hidden_layers
+        metrics = self.config.metrics.split(",")
+        metrics = [item for item in metrics if item != "ww_alpha"]
 
-            for i in range(num_layers):
-                row = f"layer_{i}"
-                if row not in self.active_hooks.keys():
-                    self.active_hooks[row] = {}
+        for i in range(num_layers):
+            row = f"layer_{i}"
+            if row not in self.active_hooks.keys():
+                self.active_hooks[row] = {}
 
-                for metric in metrics:
-                    if metric not in self.active_hooks[row].keys():
-                        self.active_hooks[row][metric] = {}
+            for metric in metrics:
+                if metric not in self.active_hooks[row].keys():
+                    self.active_hooks[row][metric] = {}
 
-                    if metric != "attn_rank":
-                        self.active_hooks[row][metric] = self.model.model.layers[i].register_forward_hook(
-                            self.llama_hooks(i, metric)
-                        )
-                        # self.model.model.layers[i].register_forward_hook(
-                        #     self.llama_hooks(i, metric)
-                        # )
-                    else:
-                        self.active_hooks[row]["attn_rank"] = self.model.model.layers[i].self_attn.register_forward_hook(
-                            self.llama_hooks(i, "attn_rank")
-                        )
-                        # self.model.model.layers[i].self_attn.register_forward_hook(
-                        #     self.llama_hooks(i, "attn_rank")
-                        # )
+                if metric != "attn_rank":
+                    self.active_hooks[row][metric] = self.model.model.layers[i].register_forward_hook(
+                        self.all_hooks(i, metric)
+                    )
+                else:
+                    self.active_hooks[row]["attn_rank"] = self.model.model.layers[i].self_attn.register_forward_hook(
+                        self.all_hooks(i, "attn_rank")
+                    )
 
     def remove_all_hooks(self):
         for k, v in self.active_hooks.items():
@@ -136,23 +131,59 @@ class Tracer:
                 self.active_hooks[k][kk].remove()
 
         self.active_hooks.clear()
+    
+    def chunk_all_tensor_metrics(self, per_tensor_metrics, tensors_per_block):
+        total = len(per_tensor_metrics)
+        chunks = []
+
+        for start in range(0, total, tensors_per_block):
+            chunk = []
+        
+            for j in range(tensors_per_block):
+                chunk.append(per_tensor_metrics[start + j].item())
+        
+            chunks.append(chunk)
+        chunks = torch.tensor(chunks, dtype=torch.float32, device="cpu")
+        assert chunks.ndim == 2, f"Chunked WeightWatcher metric tensor should have no. of dimension = 2, found {chunks.ndim}"
+        return chunks
 
     def attach_weightwatcher(self):
+        """
+        WeightWatcher computes alpha (ESD-PL fit) for each weight tensor in the model.
+        That means >= 3 linear layers for attention layers and >= 2 linear layers for FFN layers.
+        We need to aggregate the per-tensor alpha values into a per-transformer-block alpha value.
+        """
         watcher = ww.WeightWatcher(model=self.model)
         details = watcher.analyze()
-        summary = watcher.get_summary(details)
 
-        ww_metrics = [m in self.config.metrics.split(",") if "ww_alpha" in m]
-        for metric in ww_metrics:
-            col = summary[metric]
+        alphas = details['alpha']
+        num_eigenvals = details['num_evals']
 
-            if "llama" in self.model_name:
-                num_layers = self.model.config.num_hidden_layers
-            else:
-                num_layers = len(self.model.model.layers)
+        tensors_per_block = MODEL_TO_LAYER_DIV[self.model_name]
+        alphas_chunked = self.chunk_all_tensor_metrics(alphas, tensors_per_block)
+        num_eigenvals_chunked = self.chunk_all_tensor_metrics(num_eigenvals, tensors_per_block)
 
+        mean_alphas = alphas_chunked.mean(dim=-1)
+        weighted_alphas = (alphas_chunked * num_eigenvals_chunked).sum(dim=-1) / num_eigenvals_chunked.sum(dim=-1)
+        percent_untrained = (alphas_chunked > 6.0).sum(dim=-1) / alphas_chunked.shape[-1]
+
+        ww_metrics = {
+            "mean_alphas": mean_alphas,
+            "weighted_alphas": weighted_alphas,
+            "percent_untrained": percent_untrained
+        }
+
+        num_layers = self.model.config.num_hidden_layers
+
+        for k, v in ww_metrics.items():
             for i in range(num_layers):
-                self.cache.push(f"layer_{i}", metric, torch.tensor([col[i]], dtype=torch.float32, device="cpu"))
+                value = v[i]
+                assert value.ndim <= 1, "For some reason, per layer WeightWatcher metric value is more than one dimensional."
+                
+                if value.ndim < 1:
+                    value = value.unsqueeze(0)
+
+                self.cache.push(f"layer_{i}", k, value)
 
 
     def __call__(self, batch):

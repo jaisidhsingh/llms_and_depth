@@ -31,6 +31,7 @@ def plot_metrics(metrics, args):
         axes[idx].plot(x, data[m], label=m)
         axes[idx].set_xlabel("Depth")
         axes[idx].set_ylabel(f"{m} metric value")
+        axes[idx].set_xticks([u+1 for u in range(len(x))])
         axes[idx].legend()
         axes[idx].set_title(m)
 
@@ -40,59 +41,71 @@ def plot_metrics(metrics, args):
     print(f"Metrics plotted at {save_path}")
 
 
-class InteractivePlotter:
-    def __init__(self, cache: LayerWiseMetricCache, out_dir="plots/interactive"):
-        self.cache = cache
-        self.out_dir = out_dir
-        os.makedirs(self.out_dir, exist_ok=True)
-        # Pro-paper color scheme (Plotly default, but can be customized)
-        self.color_scheme = pio.templates["plotly_white"]
+@torch.no_grad()
+def plot_across_runs():
+    folder = "/lustre/home/jsingh/projects/llms_and_depth/results_with_alpha"
+    files = os.listdir(folder)
+    model_names = [f.split("_")[0] for f in files]
+    dataset_name = files[0].split("_")[1]
+    seed = int(files[0].split("seed-")[-1].replace(".pt", ""))
 
-    def plot_metrics(self):
-        # Assume cache.data is {layer_idx: {metric_name: tensor}}
-        # Finalize cache if not already done
-        if not self.cache.is_finalised:
-            self.cache.finalize()
+    ww_metrics = ["mean_alphas", "weighted_alphas", "percent_untrained"]
+    data_metrics = ["input_output_cossim", "batch_entropy"]
 
-        # Gather all metric names
-        metric_names = set()
-        for layer_dict in self.cache.data.values():
-            metric_names.update(layer_dict.keys())
+    data = {}
+    for name, f in zip(model_names, files):
+        per_run_data = torch.load(os.path.join(folder, f))
+        layer_inds = [int(k.split("_")[-1]) for k in per_run_data.keys()]
+        relative_depth = [ (idx + 1) / len(layer_inds) for idx in layer_inds]
 
-        # For each metric, collect values for each layer
-        for metric in metric_names:
-            layer_indices = []
-            metric_values = []
-            for layer_idx in sorted(self.cache.data.keys()):
-                layer_dict = self.cache.data[layer_idx]
-                if metric in layer_dict:
-                    # If tensor, reduce to scalar (mean), else use as is
-                    val = layer_dict[metric]
-                    if isinstance(val, torch.Tensor):
-                        # If 1D or more, take mean
-                        if val.numel() > 1:
-                            val = val.mean().item()
-                        else:
-                            val = val.item()
-                    metric_values.append(val)
-                    layer_indices.append(layer_idx)
+        subdata = {"relative_depth": relative_depth}
 
-            # Create interactive plot
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=layer_indices,
-                y=metric_values,
-                mode="lines+markers",
-                marker=dict(color="#636EFA"),  # Plotly blue
-                line=dict(color="#636EFA"),
-                name=metric
-            ))
-            fig.update_layout(
-                title=f"{metric} across transformer layers",
-                xaxis_title="Layer index",
-                yaxis_title=metric,
-                template="plotly_white"
-            )
-            # Save to HTML
-            html_path = os.path.join(self.out_dir, f"{metric}_layerwise.html")
-            fig.write_html(html_path)
+        for m in ww_metrics:
+            subdata[m] = []
+            for k in per_run_data.keys():
+                subdata[m].append( per_run_data[k][m].cpu().item() )
+        
+        for m in data_metrics:
+            subdata[m] = []
+            for k in per_run_data.keys():
+                subdata[m].append( per_run_data[k][m].cpu().item() )
+        
+        data[name] = subdata
+    
+    torch.save(data, "/lustre/home/jsingh/projects/llms_and_depth/results_with_alpha/cleaned_data.pt")
+    
+    # ww_metrics first
+    fig, axes = plt.subplots(1, len(ww_metrics), figsize=(20, 6))
+    for i, m in enumerate(ww_metrics):
+        for name in model_names:
+            x = data[name]["relative_depth"]
+            y = data[name][m]
+            
+            axes[i].plot(x, y, label=name)
+            if m != "percent_untrained":
+                axes[i].axhline(6.0, linestyle="--", c="black")
+            axes[i].set_xlabel("relative depth")
+            axes[i].set_ylabel(m)
+            axes[i].legend()
+            axes[i].set_title(f"{m} --- {dataset_name}")
+
+    plt.suptitle(f"{dataset_name} -- {seed}") 
+    plt.savefig("../ww_metrics.pdf", bbox_inches="tight", dpi=300)
+
+
+    # data_metrics first
+    fig, axes = plt.subplots(1, len(data_metrics), figsize=(20,6))
+    for i, m in enumerate(data_metrics):
+        for name in model_names:
+            x = data[name]["relative_depth"]
+            y = data[name][m]
+            
+            axes[i].plot(x, y, label=name)
+            # axes[i].set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
+            axes[i].set_xlabel("relative depth")
+            axes[i].set_ylabel(m)
+            axes[i].legend()
+            axes[i].set_title(f"{m} --- {dataset_name}")
+    
+    plt.suptitle(f"{dataset_name} -- {seed}") 
+    plt.savefig("../data_metrics.pdf", bbox_inches="tight", dpi=300)

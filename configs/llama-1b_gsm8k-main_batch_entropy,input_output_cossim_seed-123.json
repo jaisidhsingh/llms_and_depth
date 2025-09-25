@@ -1,0 +1,1 @@
+{"random_seed": 123, "device": "cuda", "on_colab": false, "model_name": "llama-1b", "metrics": "batch_entropy,input_output_cossim", "dataset_name": "gsm8k-main", "split": "test", "batch_size": 16, "num_workers": 8}
