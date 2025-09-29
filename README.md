@@ -1,51 +1,43 @@
 # Analysis of LLMs along their depth
 Jaisidh Singh
 
-### Depth-wise representation similarity
+## TLDR
 
-- [ ] cosine similarity - only residual
-- [ ] cosine similarity - random inputs
-- [ ] cosine similarity - rand. init
-- [ ] cosine similarity - de-correlated
-- [ ] cosine similarity - factual data
-- [ ] cosine similarity - gsm8k
+- LLMs show increased layer "redundancy" along their depth.
+- Redundancy (in current literature) mainly points to
+    - the impact of skipping a layer in the forward pass
+    - how similar layer-wise representations are
 
-### Depth-wise eigenspectrum analysis
+- Pre-LN transformers exhibit 
+    - reduced grad-norms in deeper layers
+    - lower performance drops when skipping deeper layers
 
-- [ ] eigenspectrum difference - non-ln-scaling model
-- [ ] eigenspectrum difference - ln-scaling model
+- Post-LN transformers exhibit
+    - increased grad-norms in deeper layers
+    - lower performance drops when skipping early layers
 
-### Depth-wise impacts
+- Mixed-LN transformers:
+    - uniform grad-norms across depth
+    - uniform performance drops upon skipping layers acros depth
 
-- [ ] influence on ntp - non-ln-scaling model
-- [ ] influence on ntp - ln-scaling model
+- Redundancy actually seems like how "well-trained" a layer is
 
-### Diganta's ideas
+## Experiment 1
+- Idea: quantify "well-trained" using HTSR Theory (power-law fit of the ESD of eigenvalues of weight matrices).
+- Theory: I've written a small proof, that relates the variance of $x_l$ with the Frobenius norm of the weight matrices in layer $l$. 
+- Why: confirms our hypothesis & backs our proof
+- Result:
+    - Pre-LN transformers have more "untrained" weight matrices along depth
+    - Mixed-LN transformers have less "untrained" weight matrices along depth
 
-- [ ] Test time mixture of depth
-- [ ] report performance metrics on GSM-8K
+## Experiment 2
+- Idea: since Mix-LN checkpoints aren't released, compute grad-norm across depth for Gemma3
+- Why: confirms connection of (LayerNorms + grad-norms) to "well-trained"-ness 
+- Result:
+    - TODO
 
-## Questions
-
-- Is representation similarity a good indicator of layer-wise performance (across all architectures?)
-- Whether CoT/RLHF/SFT fine-tuning alters internal data-structures in terms of syntax tree?
-
-- Does LNS fix the second half low contribution effects as per RC?
-- Same for recurrent models.
-- Do representations of different eigenspectra lead to different confidences?
-- Take HH dataset and get CoT traces from a big aligned model, then fine-tune Pythia on it.
-
-- Does LNS show similar entropy + layer-wise sim/perf?
-- Does LNS affect the discrete de-tokenization stage?
-
-## Forward propagation with residuals
-```
-x = input_embeds
-layer_1_out = x + f1(x) + g1(x + f1(x))
-decorrelated_layer_1_out = f1(x) + g1(x + f1(x))
-
-layer_2_out =  x + f1(x) + g1(x + f1(x)) + f2(x + f1(x) + g1(x + f1(x))) + g2(x + f1(x) + g1(x + f1(x)) + f2(x + f1(x) + g1(x + f1(x))))
-decorrelated_layer_2_out = f2(x + f1(x) + g1(x + f1(x))) + g2(x + f1(x) + g1(x + f1(x)) + f2(x + f1(x) + g1(x + f1(x))))
-
-decorrelated_layer_i_out = layer_i_out - layer_i_inp
-```
+## Experiment 3
+- Idea: compute $\Delta$-perplexity found by skipping layers across depth
+- Why: fully rounded redundancy quantification according to current literature
+- Result:
+    - TODO

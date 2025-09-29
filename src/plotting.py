@@ -109,3 +109,7 @@ def plot_across_runs():
     
     plt.suptitle(f"{dataset_name} -- {seed}") 
     plt.savefig("../data_metrics.pdf", bbox_inches="tight", dpi=300)
+
+# @torch.no_grad()
+# def plot_ppls():
+#     pass

@@ -1,0 +1,1 @@
+{"random_seed": 123, "device": "cuda", "on_colab": false, "model_name": "qwen3-0.6b-it", "metrics": "grad_norm", "dataset_name": "gsm8k-main", "split": "test", "batch_size": 8, "num_workers": 8}

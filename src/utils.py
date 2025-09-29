@@ -110,7 +110,9 @@ def get_model(model_name, device, get_init_model=False, on_colab=False):
     if not get_init_model:
         if not on_colab:
             model_path = MODEL_NAME_TO_PATH[model_name]
-            model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True, torch_dtype=torch.float32)
+            model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, trust_remote_code=True, torch_dtype=torch.float32,
+                attn_implementation="eager" if "gemma" in model_name else "sdpa"
+            )
         else:
             model_id = MODEL_TO_HF_ID[model_name]
             model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device, trust_remote_code=True, torch_dtype=torch.float32)
@@ -181,7 +183,7 @@ def save_result(result, save_name, args):
 
 def split_args(args):
     metrics = set(args.metrics.split(","))
-    all_eval_metrics = set(["layer_skip_extrinsic", "layer_skip_intrinsic"])
+    all_eval_metrics = set(["drop_perf", "drop_ppl"])
 
     eval_metrics = metrics.intersection(all_eval_metrics)
     non_eval_metrics = metrics - eval_metrics

@@ -21,6 +21,7 @@ class Args(BaseArgs):
 
     # model settings
     model_name: str = "llama3.2-1b"
+    # all metrics = (input_output_cossim, batch_entropy, ww_alpha, drop_ppl)
     metrics: str = "input_output_cossim,batch_entropy,ww_alpha"
 
     # data settings
