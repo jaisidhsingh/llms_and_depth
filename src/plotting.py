@@ -1,11 +1,9 @@
 import torch
+import json
 import numpy as np
 from pylab import plt
-import plotly.graph_objects as go
-import plotly.io as pio
 import os
 
-from src.tracer import LayerWiseMetricCache
 from src.utils import create_experiment_name
 
 
@@ -110,6 +108,50 @@ def plot_across_runs():
     plt.suptitle(f"{dataset_name} -- {seed}") 
     plt.savefig("../data_metrics.pdf", bbox_inches="tight", dpi=300)
 
-# @torch.no_grad()
-# def plot_ppls():
-#     pass
+@torch.no_grad()
+def plot_ppls():
+    folder = "/lustre/home/jsingh/projects/llms_and_depth/results_with_alpha"
+    files = os.listdir(folder)
+    ppl_files = [f for f in files if "_drop_ppl_" in f]
+    names = [f.split("_")[0] for f in ppl_files]
+    seed = int(files[0].split("_seed-")[-1].replace(".pt", ""))
+    dataset_name = "gsm8k-main"
+
+    base_ppls = json.load(open("/lustre/home/jsingh/projects/llms_and_depth/base_ppls.json"))
+    data = {}
+    for name, f in zip(names, ppl_files):
+        path = os.path.join(folder, f)
+        per_run_data = torch.load(path)
+
+        layer_inds = [int(k.split("_")[-1]) for k in per_run_data.keys()]
+        layer_inds.sort()
+        relative_depth = [ (idx + 1) / len(layer_inds) for idx in layer_inds]
+        ppls = [per_run_data[f"layer_{lidx}"]["drop_ppl"] for lidx in layer_inds]
+
+        data[name] = {"relative_depth": relative_depth, "drop_perplexities": ppls, "base_perplexity": base_ppls[name]}
+    
+    torch.save(data, os.path.join(folder, "ppl_data_cleaned.pt"))
+
+
+@torch.no_grad()
+def plot_grad_norms():
+    folder = "/lustre/home/jsingh/projects/llms_and_depth/results_with_alpha"
+    files = os.listdir(folder)
+    ppl_files = [f for f in files if "_grad_norm_" in f]
+    names = [f.split("_")[0] for f in ppl_files]
+    seed = int(files[0].split("_seed-")[-1].replace(".pt", ""))
+    dataset_name = "gsm8k-main"
+
+    data = {}
+    for name, f in zip(names, ppl_files):
+        path = os.path.join(folder, f)
+        per_run_data = torch.load(path)
+
+        layer_inds = [int(k.split("_")[-1]) for k in per_run_data.keys()]
+        layer_inds.sort()
+        relative_depth = [ (idx + 1) / len(layer_inds) for idx in layer_inds]
+        ppls = [per_run_data[f"layer_{lidx}"]["grad_norm"] for lidx in layer_inds]
+
+        data[name] = {"relative_depth": relative_depth, "grad_norms": ppls}
+    
+    torch.save(data, os.path.join(folder, "grad_norm_data_cleaned.pt"))
