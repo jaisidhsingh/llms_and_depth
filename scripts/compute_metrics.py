@@ -170,7 +170,7 @@ def compute_grad_norm(args):
     bar = tqdm(total=len(loader))
     bar.set_description(args.model_name)
 
-    metrics = {f"layer_{i}": {"grad_norm": 0} for i in range(model.config.num_hidden_layers)}
+    metrics = {f"layer_{i}": {"mean_grad_norm": 0} for i in range(model.config.num_hidden_layers)}
 
     for idx, batch in enumerate(loader):
         batch = cast_batch_to_device(batch, args.device)
@@ -190,17 +190,21 @@ def compute_grad_norm(args):
 
         for lidx, layer in enumerate(model.model.layers):
             total_norm_sq = 0
+            pc = 0
             for param in layer.parameters():
                 assert param.grad is not None, "Grad is None."
-                if param.grad is not None:
-                    total_norm_sq += param.grad.norm().item() ** 2
-            metrics[f"layer_{lidx}"]['grad_norm'] += total_norm_sq ** 0.5
+                # total_norm_sq += param.grad.norm().item() ** 2
+                total_norm_sq += param.grad.norm().item()
+                pc += 1
+
+            # metrics[f"layer_{lidx}"]['grad_norm'] += total_norm_sq ** 0.5
+            metrics[f"layer_{lidx}"]['mean_grad_norm'] += total_norm_sq / pc
 
         bar.update(1)
     bar.close()
     
     for k, v in metrics.items():
-        metrics[k]['grad_norm'] = v['grad_norm'] / len(loader)
+        metrics[k]['mean_grad_norm'] = v['mean_grad_norm'] / len(loader)
     return metrics
 
 
